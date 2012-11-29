@@ -548,6 +548,29 @@ def add(*args):
 	for url in urls: feeds.append(Feed(url, to))
 	unlock(feeds, feedfileObject)
 
+# Threading part
+def makeThreads(threadDb, extraheaders):
+	link = extraheaders['rss-url']
+	messageId = extraheaders['Message-Id']
+
+	refMessage = None
+	key1 = link.encode("utf-8")
+	key2 = title.encode("utf-8")
+	m = re.match(r"^https?:[^ ]+-(\d+)\.htm.*", link)
+	if m:
+		key3 = m.group(1)
+	if   key1 in threadDb: threadRec = pickle.loads(threadDb[key1])
+	elif key2 in threadDb: threadRec = pickle.loads(threadDb[key2])
+	else: threadRec = {'date': time.time()}
+	if 'id' in threadRec:
+		refMessage = threadRec['id']
+		extraheaders['References'] = refMessage
+	else:
+		threadRec['id'] = messageId
+	threadRecD = pickle.dumps(threadRec)
+	if not key1 in threadDb: threadDb[key1] = threadRecD
+	if not key2 in threadDb: threadDb[key2] = threadRecD
+
 def run(num=None):
 	feeds, feedfileObject = load()
 	threadDb = loadThreads()
@@ -714,28 +737,11 @@ def run(num=None):
 							else:
 								print >>warn, "W: malformed BONUS HEADER", BONUS_HEADER	
 
-					extraheaders['rss-url'] = link
-
 					# Threading part
-					messageId = '<' + str(uuid4()) + '@rss2email>'
-					extraheaders['Message-Id'] = messageId
-					refMessage = None
-					key1 = link.encode("utf-8")
-					key2 = title.encode("utf-8")
-					m = re.match(r"^https?:[^ ]+-(\d+)\.htm.*", link)
-					if m:
-						key3 = m.group(1)
-					if   key1 in threadDb: threadRec = pickle.loads(threadDb[key1])
-					elif key2 in threadDb: threadRec = pickle.loads(threadDb[key2])
-					else: threadRec = {'date': time.time()}
-					if 'id' in threadRec:
-						refMessage = threadRec['id']
-						extraheaders['References'] = refMessage
-					else:
-						threadRec['id'] = messageId
-					threadRecD = pickle.dumps(threadRec)
-					if not key1 in threadDb: threadDb[key1] = threadRecD
-					if not key2 in threadDb: threadDb[key2] = threadRecD
+					extraheaders['rss-url'] = link
+					extraheaders['Message-Id'] = '<%s@rss2email>' % str(uuid4())
+
+					makeThreads(threadDb, extraheaders)
 
 					entrycontent = getContent(entry, HTMLOK=HTML_MAIL)
 					contenttype = 'plain'
