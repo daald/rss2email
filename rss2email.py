@@ -113,7 +113,10 @@ CHARSET_LIST='US-ASCII', 'BIG5', 'ISO-2022-JP', 'ISO-8859-1', 'UTF-8'
 from email.MIMEText import MIMEText
 from email.Header import Header
 from email.Utils import parseaddr, formataddr
-			 
+
+import bsddb	# db access
+from uuid import uuid4  # for unique message-id
+
 # Note: You can also override the send function.
 
 def send(sender, recipient, subject, body, contenttype, extraheaders=None, smtpserver=None):
@@ -503,6 +506,11 @@ def load(lock=1):
 		
 	return feeds, feedfileObject
 
+def loadThreads():
+	dbFile = os.path.expanduser('~/.rss2email/threads.bdb')
+	threadDb = bsddb.btopen(dbFile, 'c')
+	return threadDb
+
 def unlock(feeds, feedfileObject):
 	if not unix: 
 		pickle.dump(feeds, open(feedfile, 'w'))
@@ -542,6 +550,7 @@ def add(*args):
 
 def run(num=None):
 	feeds, feedfileObject = load()
+	threadDb = loadThreads()
 	smtpserver = None
 	try:
 		# We store the default to address as the first item in the feeds list.
@@ -704,7 +713,26 @@ def run(num=None):
 								extraheaders[hdr[:pos]] = hdr[pos+1:].strip()
 							else:
 								print >>warn, "W: malformed BONUS HEADER", BONUS_HEADER	
-					
+
+					# Threading function
+					extraheaders['rss-url'] = link
+					refMessage = None
+					key1 = link.encode("utf-8")
+					key2 = title.encode("utf-8")
+					if   key1 in threadDb: threadRec = pickle.loads(threadDb[key1])
+					elif key2 in threadDb: threadRec = pickle.loads(threadDb[key2])
+					else: threadRec = {'date': time.time()}
+					if 'id' in threadRec:
+						refMessage = threadRec['id']
+						extraheaders['References'] = refMessage
+					else:
+						refMessage = '<' + str(uuid4()) + '@rss2email>'
+						threadRec['id'] = refMessage
+						extraheaders['Message-Id'] = refMessage
+					threadRecD = pickle.dumps(threadRec)
+					if not key1 in threadDb: threadDb[key1] = threadRecD
+					if not key2 in threadDb: threadDb[key2] = threadRecD
+
 					entrycontent = getContent(entry, HTMLOK=HTML_MAIL)
 					contenttype = 'plain'
 					content = ''
@@ -793,6 +821,9 @@ def run(num=None):
 
 	finally:		
 		unlock(feeds, feedfileObject)
+		if threadDb:
+			threadDb.sync()
+			threadDb.close()
 		if smtpserver:
 			smtpserver.quit()
 
