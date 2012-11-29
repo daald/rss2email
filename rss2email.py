@@ -714,14 +714,17 @@ def run(num=None):
 							else:
 								print >>warn, "W: malformed BONUS HEADER", BONUS_HEADER	
 
+					extraheaders['rss-url'] = link
+
 					# Threading part
 					messageId = '<' + str(uuid4()) + '@rss2email>'
 					extraheaders['Message-Id'] = messageId
-
-					extraheaders['rss-url'] = link
 					refMessage = None
 					key1 = link.encode("utf-8")
 					key2 = title.encode("utf-8")
+					m = re.match(r"^https?:[^ ]+-(\d+)\.htm.*", link)
+					if m:
+						key3 = m.group(1)
 					if   key1 in threadDb: threadRec = pickle.loads(threadDb[key1])
 					elif key2 in threadDb: threadRec = pickle.loads(threadDb[key2])
 					else: threadRec = {'date': time.time()}
