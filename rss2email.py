@@ -115,7 +115,7 @@ from email.Header import Header
 from email.Utils import parseaddr, formataddr
 
 import bsddb	# db access
-from uuid import uuid4  # for unique message-id
+import re
 
 # Note: You can also override the send function.
 
@@ -549,27 +549,42 @@ def add(*args):
 	unlock(feeds, feedfileObject)
 
 # Threading part
-def makeThreads(threadDb, extraheaders):
+def makeThreads(threadDb, extraheaders, title):
 	link = extraheaders['rss-url']
 	messageId = extraheaders['Message-Id']
 
-	refMessage = None
-	key1 = link.encode("utf-8")
-	key2 = title.encode("utf-8")
+	keys = []
+
+	if link > '':
+		keys.append(link)
+	if title > '':
+		keys.append(title)
 	m = re.match(r"^https?:[^ ]+-(\d+)\.htm.*", link)
 	if m:
-		key3 = m.group(1)
-	if   key1 in threadDb: threadRec = pickle.loads(threadDb[key1])
-	elif key2 in threadDb: threadRec = pickle.loads(threadDb[key2])
-	else: threadRec = {'date': time.time()}
-	if 'id' in threadRec:
-		refMessage = threadRec['id']
-		extraheaders['References'] = refMessage
-	else:
+		keys.append(m.group(1))
+
+	threadRec = None
+	refs = set()
+	for k in keys:
+		key = k.encode("utf-8")
+		if key in threadDb:
+			threadRec = pickle.loads(threadDb[key])
+			if 'id' in threadRec:
+				refs.add(threadRec['id'])
+
+	if not threadRec:
+		threadRec = {'date': time.time()}
+	if not 'id' in threadRec:
 		threadRec['id'] = messageId
+
+	if len(refs) > 0:
+		# mark this message as a follower
+		extraheaders['References'] = ', '.join(refs)
+
 	threadRecD = pickle.dumps(threadRec)
-	if not key1 in threadDb: threadDb[key1] = threadRecD
-	if not key2 in threadDb: threadDb[key2] = threadRecD
+	for k in keys:
+		key = k.encode("utf-8")
+		threadDb[key] = threadRecD
 
 def run(num=None):
 	feeds, feedfileObject = load()
@@ -739,9 +754,9 @@ def run(num=None):
 
 					# Threading part
 					extraheaders['rss-url'] = link
-					extraheaders['Message-Id'] = '<%s@rss2email>' % str(uuid4())
+					extraheaders['Message-Id'] = '<%s@rss2email>' % frameid
 
-					makeThreads(threadDb, extraheaders)
+					makeThreads(threadDb, extraheaders, title)
 
 					entrycontent = getContent(entry, HTMLOK=HTML_MAIL)
 					contenttype = 'plain'
