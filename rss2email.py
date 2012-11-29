@@ -714,7 +714,10 @@ def run(num=None):
 							else:
 								print >>warn, "W: malformed BONUS HEADER", BONUS_HEADER	
 
-					# Threading function
+					# Threading part
+					messageId = '<' + str(uuid4()) + '@rss2email>'
+					extraheaders['Message-Id'] = messageId
+
 					extraheaders['rss-url'] = link
 					refMessage = None
 					key1 = link.encode("utf-8")
@@ -726,9 +729,7 @@ def run(num=None):
 						refMessage = threadRec['id']
 						extraheaders['References'] = refMessage
 					else:
-						refMessage = '<' + str(uuid4()) + '@rss2email>'
-						threadRec['id'] = refMessage
-						extraheaders['Message-Id'] = refMessage
+						threadRec['id'] = messageId
 					threadRecD = pickle.dumps(threadRec)
 					if not key1 in threadDb: threadDb[key1] = threadRecD
 					if not key2 in threadDb: threadDb[key2] = threadRecD
